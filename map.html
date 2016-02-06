@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+    <head>    
+        <meta charset="utf-8" />
+        <title>台南20160206 災情地圖</title>
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+        <script src="//d3js.org/d3.v3.min.js" charset="utf-8"></script>
+        <script src="//d3js.org/topojson.v1.min.js"></script>	
+		<style>
+
+
+html, body {
+  width:100%;
+  height: 100%;
+ }
+ 
+svg {
+ cursor:move;
+ }
+.hover{
+  fill:#FF8000 !important;
+  stroke:#fff;
+  background: #FF8000;
+} 
+.boundary {
+  fill: none;
+  stroke: #fff;
+}
+.selected {
+  fill: orange;
+  stroke: #000;
+}
+</style>
+
+    </head> 
+    <body>
+
+<h1>台南20160206 災情地圖</h1><br />
+        <svg  width="100%" height="900px" id="svg1" ></svg>
+		<div id=content style="clear:both;position:fixed;right:0px;top:0px;width:400px;height:100%;overflow:scroll;font-size:10px"></div>
+		<div id=footer style="clear:both;position:fixed;bottom:0px;width:100%;text-align:center;font-size:10px;color:#ccc">Created by Perltk. Data Source From <a href=http://data.tainan.gov.tw/dataset/0206-earthquake target=_blank>Tainan Opendata</a></div>
+        <script> 
+		
+		var width=1200,height=1100;
+	    var svg = d3.select("#svg1");
+		var scale = 85000;
+		
+	
+		var projection = d3.geo
+			.mercator()		//投射類型
+			.translate([width,height/2])//地圖上下左右移動(置中)
+			.scale(scale)	//地圖伸縮
+			
+			.center([120.8,23.07]); //標註中心點
+		var path = d3.geo.path().projection(projection);
+		
+		var area_a=new Array();//放置所有區別名稱
+		var area_data_a=new Array();//放置所有區別顯示資料(數值,文字)
+		var area_class_a=new Array();//放置所有區別id
+		var area_color_a=new Array();//放置所有區別id
+		var area_x_a=new Array();//放置所有區別id的x座標
+		var area_y_a=new Array();//放置所有區別id的x座標
+		var area_a_index=0;
+		var maptext;
+                      
+            //參考網址http://blogger.twtnn.com/	
+
+		
+			d3.json("map/tainan.geojson", function(json) {
+						//調整顏色value
+						var same=0;//比對是否相同
+	                   
+
+							for (var i = 0; i < json.features.length; i++) {
+								 same=0;
+								 for(j=0;j<area_a.length;j++)
+								 {
+									 if(area_a[j]==json.features[i].properties.TOWN)
+									 {
+									   json.features[i].properties.colordata = j;//console.log(json.features[i].geometry);
+
+									   same=1;
+									   break;
+									 }
+								 }
+								 if(same==0)
+								 {
+									 json.features[i].properties.colordata =area_a_index;
+									 area_a[area_a_index]=json.features[i].properties.TOWN;
+									 area_class_a[area_a_index]=json.features[i].properties.TOWN_ID;								 
+									 area_a_index++;						
+								 }							 
+								 //json.features[i].properties.colordata = Math.floor((Math.random() * 100) + 1);
+							}
+					
+						
+						//顯示目前有哪些區域
+						for(i=0;i<area_a.length;i++)
+						{
+							// console.log(j+area_a[j]);
+							//補齊資料是空的區域 
+							if(typeof area_data_a[i] == 'undefined')
+							{
+								area_data_a[i]=0;
+								area_color_a[i]=0;//先將全部的內容預設為0
+							}
+							
+						}
+							
+							
+						d3main(json);
+						//get_color("data/data2.csv");
+	  
+			});//end json
+
+ 
+function d3main(json){
+
+    var geodata = json.features;//資料來源
+ 
+    //定義設定顏色區間處理函式
+    color_range= d3.scale.linear()
+	        .domain([0,36]) //37個行政區,index 0~36
+			.range([0,255]);//色碼MAX255 
+    //產出地圖
+    var map =  svg.selectAll("path")
+                  .data(geodata)
+                  .enter()
+                  .append("path")
+                  .attr({
+            "d": path,
+            "fill": "#acba9d",
+            "stroke": "#aaa",
+			"class":function(d){return "c"+d.properties.TOWN_ID;}//將每個區域加上序號當做class
+        })
+		.style("fill", function(d) {
+					   		var value = parseInt(d.properties.colordata);					   		
+					   		if (value>=0&&value<=36) {
+						   	    return gencolor_green(value);//產生顏色
+								
+					   		} else {
+						   		return "#ccc";
+					   		}
+					   })	
+		.on("mouseover",function(d){
+		   //靠近顯示hover css樣式
+		   var c=d3.select(this).attr('class');
+		   d3.selectAll('.'+c).attr('class',c+" hover");
+
+		   })
+		.on("mouseout",function(){
+			//移除hover class...
+			var c=d3.select(this).attr('class');
+			c=c.substr(0,9);
+			d3.selectAll('.'+c).classed("hover",false);//正規移除class作法
+			//d3.selectAll('.'+c).attr('class',c);//本寫法為很笨方法
+			
+			d3.select('#alert').remove();//提示視窗關閉
+		})
+		.append("title")
+		.text(function(d){return d.properties.TOWN;});
+  
+    //判斷各區並給予區域名稱
+    for(j=0;j<area_class_a.length;j++)
+	{
+	  area_x_a[j]=getBoundingBoxCenter(svg.selectAll(".c"+area_class_a[j]))[0]-20;
+	  area_y_a[j]=getBoundingBoxCenter(svg.selectAll(".c"+area_class_a[j]))[1]+15;
+ 
+	  
+	  svg.append("text")
+	  .text(area_a[j])
+	  .attr("x", area_x_a[j])
+	  .attr("y", area_y_a[j])
+	  .attr("font-size","18px")
+	  .attr("fill","#000000")
+	  .attr("font-weight","bolder");					
+	}
+    
+  	 d3.csv("data/d1.csv", function(csv) {//csv資料必須先透過記事本轉換成utf8格式
+
+		svg.selectAll("circle")
+		   .data(csv).enter().append("circle")
+		   .attr("cx",function(d){ return projection([d.lng,d.lat])[0];})
+		   .attr("cy",function(d){ return projection([d.lng,d.lat])[1];})
+		   .attr("r", 5).style("fill", "#f00")
+		   .attr('stroke','#c00')
+		   .attr('stroke-width','1px')
+		   .attr('class',function(d){ return "d"+d.id;})
+		   .on("mouseover",function(d){
+		   //靠近顯示hover css樣式
+		   var c=d3.select(this).attr('class');
+		   d3.selectAll('.'+c).attr('class',c+" hover");
+		   })
+			.on("mouseout",function(){
+				//移除hover class...
+				var c=d3.select(this).attr('class');
+				var c_a=c.split(" ");
+				d3.selectAll('.'+c_a[0]).classed("hover",false);//正規移除class作法
+			})
+		    .append("title")
+			.text(function(d){return d.id+d.now+d.add+"->"+d.deal;})
+			;
+   });
+   
+   
+  	 d3.csv("data/d1.csv", function(csv) {//csv資料必須先透過記事本轉換成utf8格式
+
+		
+		d3.select("#content")
+         .selectAll("div")
+		.data(csv).enter()
+		.append('div')
+		  .html(function(d){return d.id+d.now+d.add+"->"+d.deal;})
+		  .style({
+		  'border':'1px solid #000',
+		  'width':'100%',
+		  'clear':'both'
+		  })
+		  .attr("class",function(d){return "d"+d.id})
+		  .on("mouseover",function(d){
+		   //靠近顯示hover css樣式
+		   var c=d3.select(this).attr('class');
+		   d3.selectAll('.'+c).attr('class',c+" hover");
+		   })
+			.on("mouseout",function(){
+				//移除hover class...
+				var c=d3.select(this).attr('class');
+				var c_a=c.split(" ");
+				d3.selectAll('.'+c_a[0]).classed("hover",false);//正規移除class作法
+			}) ;
+   });
+        
+}
+
+
+function gencolor_green(val)
+{//依序給色
+  var temp=val*2+150;
+  var temp2=3*val;//不能超過255
+  return 'rgb('+parseInt(color_range(val))+',255,'+temp2+')';
+
+}
+
+function gencolor_black(val)
+{//依序給色
+
+  return 'rgb('+parseInt(color_range(val))+','+parseInt(color_range(val))+','+parseInt(color_range(val))+')';
+
+}
+
+function get_color(csvurl)
+{
+	d3.csv(csvurl, function(csv) {
+		for (var k = 0; k < csv.length; k++) {
+		temp_num=csv[k].num;
+			for (var i = 0; i < area_class_a.length; i++) {			 
+			   if(area_a[i]==csv[k].town) 
+			   {
+			     //console.log(area_color_a[i]+"@"+temp_num);
+			     area_color_a[i] = temp_num;
+				 
+			   }
+			   //console.log(area_a[i]+"@"+csv[k].num);
+			}   
+		}
+        change_color(area_class_a,area_color_a);//載入完成再換顏色		
+		
+	});		
+}
+
+function change_color(class_a,color_a)
+{
+    console.log(color_a.length);
+	for(j=0;j<color_a.length;j++)
+	{
+	  
+	  svg.selectAll(".c"+class_a[j])
+	  .style("fill", function(d) {
+		return gencolor_green(color_a[j]);//產生顏色					
+		});					
+	}
+}
+
+function clicked(d) {
+ alert("ya");
+}
+//計算選定的區塊畫面中間
+function getBoundingBoxCenter(selection) {
+    // get the DOM element from a D3 selection
+    // you could also use "this" inside .each()
+    var element = selection.node(),
+        // use the native SVG interface to get the bounding box
+        bbox = element.getBBox();
+    // return the center of the bounding box
+    return [bbox.x + bbox.width/2, bbox.y + bbox.height/2];
+}
+        </script>
+		
+</body>
+</html>
